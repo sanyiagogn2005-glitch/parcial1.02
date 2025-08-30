@@ -1,0 +1,73 @@
+from flask import Flask, render_template, redirect, url_for, request, flash
+from froms import EventForm, RegisterForm
+from data import events, categories
+import uuid
+
+app = Flask(__name__)
+app.secret_key = "clave_secreta_segura"
+
+# Página principal
+@app.route("/")
+def index():
+    featured = [e for e in events if e.get("featured")]
+    return render_template("index.html", events=events, featured=featured)
+
+# Detalle de evento
+@app.route("/event/<slug>/")
+def event_detail(slug):
+    event = next((e for e in events if e["slug"] == slug), None)
+    if not event:
+        flash("Evento no encontrado", "danger")
+        return redirect(url_for("index"))
+    return render_template("event_detail.html", event=event)
+
+# Crear nuevo evento (Admin)
+@app.route("/admin/event/", methods=["GET", "POST"])
+def new_event():
+    form = EventForm()
+    if form.validate_on_submit():
+        new_event = {
+            "id": uuid.uuid4().int >> 64,
+            "title": form.title.data,
+            "slug": form.title.data.lower().replace(" ", "-"),
+            "description": form.description.data,
+            "date": str(form.date.data),
+            "time": form.time.data.strftime("%H:%M"),
+            "location": form.location.data,
+            "category": form.category.data,
+            "max_attendees": form.max_attendees.data,
+            "attendees": [],
+            "featured": form.featured.data
+        }
+        events.append(new_event)
+        flash("Evento creado exitosamente ✅", "success")
+        return redirect(url_for("index"))
+    return render_template("new_event.html", form=form)
+
+# Registro a un evento
+@app.route("/event/<slug>/register/", methods=["GET", "POST"])
+def register(slug):
+    event = next((e for e in events if e["slug"] == slug), None)
+    if not event:
+        flash("Evento no encontrado", "danger")
+        return redirect(url_for("index"))
+
+    form = RegisterForm()
+    if form.validate_on_submit():
+        if len(event["attendees"]) < event["max_attendees"]:
+            attendee = {"name": form.name.data, "email": form.email.data}
+            event["attendees"].append(attendee)
+            flash("Registro exitoso 🎉", "success")
+            return redirect(url_for("event_detail", slug=slug))
+        else:
+            flash("Cupo lleno ❌", "danger")
+    return render_template("register.html", event=event, form=form)
+
+# Filtrar por categoría
+@app.route("/events/category/<category>/")
+def filter_by_category(category):
+    filtered = [e for e in events if e["category"].lower() == category.lower()]
+    return render_template("index.html", events=filtered, featured=[])
+
+if __name__ == "__main__":
+    app.run(debug=True)
